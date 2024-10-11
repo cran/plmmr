@@ -1,0 +1,504 @@
+<!DOCTYPE html>
+
+<html>
+
+<head>
+
+<meta charset="utf-8" />
+<meta name="generator" content="pandoc" />
+<meta http-equiv="X-UA-Compatible" content="IE=EDGE" />
+
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+
+<meta name="author" content="Tabitha Peter" />
+
+
+<title>Getting started with plmmr</title>
+
+<script>// Pandoc 2.9 adds attributes on both header and div. We remove the former (to
+// be compatible with the behavior of Pandoc < 2.8).
+document.addEventListener('DOMContentLoaded', function(e) {
+  var hs = document.querySelectorAll("div.section[class*='level'] > :first-child");
+  var i, h, a;
+  for (i = 0; i < hs.length; i++) {
+    h = hs[i];
+    if (!/^h[1-6]$/i.test(h.tagName)) continue;  // it should be a header h1-h6
+    a = h.attributes;
+    while (a.length > 0) h.removeAttribute(a[0].name);
+  }
+});
+</script>
+
+<style type="text/css">
+code{white-space: pre-wrap;}
+span.smallcaps{font-variant: small-caps;}
+span.underline{text-decoration: underline;}
+div.column{display: inline-block; vertical-align: top; width: 50%;}
+div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+ul.task-list{list-style: none;}
+</style>
+
+
+
+<style type="text/css">
+code {
+white-space: pre;
+}
+.sourceCode {
+overflow: visible;
+}
+</style>
+<style type="text/css" data-origin="pandoc">
+pre > code.sourceCode { white-space: pre; position: relative; }
+pre > code.sourceCode > span { line-height: 1.25; }
+pre > code.sourceCode > span:empty { height: 1.2em; }
+.sourceCode { overflow: visible; }
+code.sourceCode > span { color: inherit; text-decoration: inherit; }
+div.sourceCode { margin: 1em 0; }
+pre.sourceCode { margin: 0; }
+@media screen {
+div.sourceCode { overflow: auto; }
+}
+@media print {
+pre > code.sourceCode { white-space: pre-wrap; }
+pre > code.sourceCode > span { display: inline-block; text-indent: -5em; padding-left: 5em; }
+}
+pre.numberSource code
+{ counter-reset: source-line 0; }
+pre.numberSource code > span
+{ position: relative; left: -4em; counter-increment: source-line; }
+pre.numberSource code > span > a:first-child::before
+{ content: counter(source-line);
+position: relative; left: -1em; text-align: right; vertical-align: baseline;
+border: none; display: inline-block;
+-webkit-touch-callout: none; -webkit-user-select: none;
+-khtml-user-select: none; -moz-user-select: none;
+-ms-user-select: none; user-select: none;
+padding: 0 4px; width: 4em;
+color: #aaaaaa;
+}
+pre.numberSource { margin-left: 3em; border-left: 1px solid #aaaaaa; padding-left: 4px; }
+div.sourceCode
+{ }
+@media screen {
+pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+}
+code span.al { color: #ff0000; font-weight: bold; } 
+code span.an { color: #60a0b0; font-weight: bold; font-style: italic; } 
+code span.at { color: #7d9029; } 
+code span.bn { color: #40a070; } 
+code span.bu { color: #008000; } 
+code span.cf { color: #007020; font-weight: bold; } 
+code span.ch { color: #4070a0; } 
+code span.cn { color: #880000; } 
+code span.co { color: #60a0b0; font-style: italic; } 
+code span.cv { color: #60a0b0; font-weight: bold; font-style: italic; } 
+code span.do { color: #ba2121; font-style: italic; } 
+code span.dt { color: #902000; } 
+code span.dv { color: #40a070; } 
+code span.er { color: #ff0000; font-weight: bold; } 
+code span.ex { } 
+code span.fl { color: #40a070; } 
+code span.fu { color: #06287e; } 
+code span.im { color: #008000; font-weight: bold; } 
+code span.in { color: #60a0b0; font-weight: bold; font-style: italic; } 
+code span.kw { color: #007020; font-weight: bold; } 
+code span.op { color: #666666; } 
+code span.ot { color: #007020; } 
+code span.pp { color: #bc7a00; } 
+code span.sc { color: #4070a0; } 
+code span.ss { color: #bb6688; } 
+code span.st { color: #4070a0; } 
+code span.va { color: #19177c; } 
+code span.vs { color: #4070a0; } 
+code span.wa { color: #60a0b0; font-weight: bold; font-style: italic; } 
+</style>
+<script>
+// apply pandoc div.sourceCode style to pre.sourceCode instead
+(function() {
+  var sheets = document.styleSheets;
+  for (var i = 0; i < sheets.length; i++) {
+    if (sheets[i].ownerNode.dataset["origin"] !== "pandoc") continue;
+    try { var rules = sheets[i].cssRules; } catch (e) { continue; }
+    var j = 0;
+    while (j < rules.length) {
+      var rule = rules[j];
+      // check if there is a div.sourceCode rule
+      if (rule.type !== rule.STYLE_RULE || rule.selectorText !== "div.sourceCode") {
+        j++;
+        continue;
+      }
+      var style = rule.style.cssText;
+      // check if color or background-color is set
+      if (rule.style.color === '' && rule.style.backgroundColor === '') {
+        j++;
+        continue;
+      }
+      // replace div.sourceCode by a pre.sourceCode rule
+      sheets[i].deleteRule(j);
+      sheets[i].insertRule('pre.sourceCode{' + style + '}', j);
+    }
+  }
+})();
+</script>
+
+
+
+
+<style type="text/css">body {
+background-color: #fff;
+margin: 1em auto;
+max-width: 700px;
+overflow: visible;
+padding-left: 2em;
+padding-right: 2em;
+font-family: "Open Sans", "Helvetica Neue", Helvetica, Arial, sans-serif;
+font-size: 14px;
+line-height: 1.35;
+}
+#TOC {
+clear: both;
+margin: 0 0 10px 10px;
+padding: 4px;
+width: 400px;
+border: 1px solid #CCCCCC;
+border-radius: 5px;
+background-color: #f6f6f6;
+font-size: 13px;
+line-height: 1.3;
+}
+#TOC .toctitle {
+font-weight: bold;
+font-size: 15px;
+margin-left: 5px;
+}
+#TOC ul {
+padding-left: 40px;
+margin-left: -1.5em;
+margin-top: 5px;
+margin-bottom: 5px;
+}
+#TOC ul ul {
+margin-left: -2em;
+}
+#TOC li {
+line-height: 16px;
+}
+table {
+margin: 1em auto;
+border-width: 1px;
+border-color: #DDDDDD;
+border-style: outset;
+border-collapse: collapse;
+}
+table th {
+border-width: 2px;
+padding: 5px;
+border-style: inset;
+}
+table td {
+border-width: 1px;
+border-style: inset;
+line-height: 18px;
+padding: 5px 5px;
+}
+table, table th, table td {
+border-left-style: none;
+border-right-style: none;
+}
+table thead, table tr.even {
+background-color: #f7f7f7;
+}
+p {
+margin: 0.5em 0;
+}
+blockquote {
+background-color: #f6f6f6;
+padding: 0.25em 0.75em;
+}
+hr {
+border-style: solid;
+border: none;
+border-top: 1px solid #777;
+margin: 28px 0;
+}
+dl {
+margin-left: 0;
+}
+dl dd {
+margin-bottom: 13px;
+margin-left: 13px;
+}
+dl dt {
+font-weight: bold;
+}
+ul {
+margin-top: 0;
+}
+ul li {
+list-style: circle outside;
+}
+ul ul {
+margin-bottom: 0;
+}
+pre, code {
+background-color: #f7f7f7;
+border-radius: 3px;
+color: #333;
+white-space: pre-wrap; 
+}
+pre {
+border-radius: 3px;
+margin: 5px 0px 10px 0px;
+padding: 10px;
+}
+pre:not([class]) {
+background-color: #f7f7f7;
+}
+code {
+font-family: Consolas, Monaco, 'Courier New', monospace;
+font-size: 85%;
+}
+p > code, li > code {
+padding: 2px 0px;
+}
+div.figure {
+text-align: center;
+}
+img {
+background-color: #FFFFFF;
+padding: 2px;
+border: 1px solid #DDDDDD;
+border-radius: 3px;
+border: 1px solid #CCCCCC;
+margin: 0 5px;
+}
+h1 {
+margin-top: 0;
+font-size: 35px;
+line-height: 40px;
+}
+h2 {
+border-bottom: 4px solid #f7f7f7;
+padding-top: 10px;
+padding-bottom: 2px;
+font-size: 145%;
+}
+h3 {
+border-bottom: 2px solid #f7f7f7;
+padding-top: 10px;
+font-size: 120%;
+}
+h4 {
+border-bottom: 1px solid #f7f7f7;
+margin-left: 8px;
+font-size: 105%;
+}
+h5, h6 {
+border-bottom: 1px solid #ccc;
+font-size: 105%;
+}
+a {
+color: #0033dd;
+text-decoration: none;
+}
+a:hover {
+color: #6666ff; }
+a:visited {
+color: #800080; }
+a:visited:hover {
+color: #BB00BB; }
+a[href^="http:"] {
+text-decoration: underline; }
+a[href^="https:"] {
+text-decoration: underline; }
+
+code > span.kw { color: #555; font-weight: bold; } 
+code > span.dt { color: #902000; } 
+code > span.dv { color: #40a070; } 
+code > span.bn { color: #d14; } 
+code > span.fl { color: #d14; } 
+code > span.ch { color: #d14; } 
+code > span.st { color: #d14; } 
+code > span.co { color: #888888; font-style: italic; } 
+code > span.ot { color: #007020; } 
+code > span.al { color: #ff0000; font-weight: bold; } 
+code > span.fu { color: #900; font-weight: bold; } 
+code > span.er { color: #a61717; background-color: #e3d2d2; } 
+</style>
+
+
+
+
+</head>
+
+<body>
+
+
+
+
+<h1 class="title toc-ignore">Getting started with plmmr</h1>
+<h4 class="author">Tabitha Peter</h4>
+
+
+
+<div class="sourceCode" id="cb1"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb1-1"><a href="#cb1-1" tabindex="-1"></a><span class="fu">library</span>(plmmr)</span>
+<span id="cb1-2"><a href="#cb1-2" tabindex="-1"></a><span class="co">#&gt; Loading required package: bigalgebra</span></span>
+<span id="cb1-3"><a href="#cb1-3" tabindex="-1"></a><span class="co">#&gt; Loading required package: bigmemory</span></span></code></pre></div>
+<div id="introduction" class="section level2">
+<h2>Introduction</h2>
+<p><code>plmmr</code> is a package for fitting
+<strong>P</strong>enalized <strong>L</strong>inear
+<strong>M</strong>ixed <strong>M</strong>odels in <strong>R</strong>.
+This package was created for the purpose of fitting penalized regression
+models to high dimensional data in which the observations are correlated
+in some complex way. For instance, this kind of data arises often in the
+context of genetics (<em>e.g.</em>, GWAS dealing with population
+structure/family structure).</p>
+<p>For more information on the theoretical context of penalized
+regression, check out <a href="https://myweb.uiowa.edu/pbreheny/7240/s23/notes.html">these online
+course notes</a>; the section on ridge regression may be a good place to
+start.</p>
+<p>The novelties of <code>plmmr</code> are:</p>
+<ol style="list-style-type: decimal">
+<li><p><strong>Integration</strong>: <code>plmmr</code> combines the
+functionality of several packages in order to do quality control, model
+fitting/analysis, and data visualization all in one package. For
+example, if you have GWAS data, <code>plmmr</code> will take you from
+PLINK files all the way to a list of SNPs for downstream
+analysis.</p></li>
+<li><p><strong>Accessibility</strong>: <code>plmmr</code> can be run
+from an <code>R</code> session on a typical desktop or laptop computer.
+The user does not need access to a supercomputer or have experience with
+the command line in order to fit models <code>plmmr</code>.</p></li>
+<li><p><strong>Handling correlation</strong>: <code>plmmr</code> uses a
+transformation that (1) measures correlation among samples and (2) uses
+this correlation measurement to improve predictions (via the best linear
+unbiased predictor, or BLUP). This means that in <code>plmm()</code>,
+there’s no need to filter data down to a ‘maximum subset of unrelated
+samples.’</p></li>
+</ol>
+</div>
+<div id="computational-capability" class="section level2">
+<h2>Computational capability</h2>
+<div id="file-backing" class="section level3">
+<h3>File-backing</h3>
+<p>In many applications of high dimensional data analysis, the dataset
+is too large to read into R – the session will crash for lack of memory.
+This is particularly common when analyzing data from genome-wide
+association studies (GWAS). To analyze such large datasets,
+<code>plmmr</code> is equipped to analyze data using
+<em>filebacking</em> - a strategy that lets R ‘point’ to a file on disk,
+rather than reading the file into the R session. Many other packages use
+this technique - <a href="https://privefl.github.io/bigstatsr/">bigstatsr</a> and <a href="https://pbreheny.github.io/biglasso/">biglasso</a> are two
+examples of packages that use the filebacking technique. The package
+that <code>plmmr</code> uses to create and store filebacked objects is
+<a href="https://CRAN.R-project.org/package=bigmemory">bigmemory</a>.
+The filebacked computation relies on the <a href="https://pbreheny.github.io/biglasso/">biglasso</a> package by <a href="https://scholar.google.com/citations?user=jpEmf04AAAAJ&amp;hl=en">Yaohui
+Zeng</a> et al. and on <a href="https://CRAN.R-project.org/package=bigalgebra">bigalgebra</a> by
+Michael Kane et al. For processing <a href="https://www.cog-genomics.org/plink/">PLINK</a> files, we use
+methods from the <code>bigsnpr</code> <a href="https://privefl.github.io/bigsnpr/">package</a> by <a href="https://privefl.github.io/">Florian Privé</a>.</p>
+</div>
+<div id="numeric-outcomes-only" class="section level3">
+<h3>Numeric outcomes only</h3>
+<p>At this time, the package is designed for linear regression only –
+that is, we are considering only continuous (numeric) outcomes. We
+maintain that treating binary outcomes as numeric values is appropriate
+in some contexts, as described by Hastie et al. in the <a href="https://hastie.su.domains/ElemStatLearn/">Elements of Statistical
+Learning</a>, chapter 4. In the future, we would like to extend this
+package to handle dichotomous outcomes via logistic regression; the
+theoretical work underlying this is an open problem.</p>
+</div>
+<div id="types-of-penalization" class="section level3">
+<h3>3 types of penalization</h3>
+<p>Since we are focused on penalized regression in this package,
+<code>plmmr</code> offers 3 choices of penalty: the minimax concave
+(MCP), the smoothly clipped absolute deviation (SCAD), and the least
+absolute shrinkage and selection operator (LASSO). The implementation of
+these penalties is built on the concepts/techniques provided in the <a href="https://pbreheny.github.io/ncvreg/">ncvreg</a> package.</p>
+</div>
+<div id="data-size-and-dimensionality" class="section level3">
+<h3>Data size and dimensionality</h3>
+<p>We distinguish between the data attributes ‘big’ and ‘high
+dimensional.’ ‘Big’ describes the amount of space data takes up on a
+computer, while ‘high dimensional’ describes a context where the ratio
+of features (also called ‘variables’ or ‘predictors’) to observations
+(e.g., samples) is high. For instance, data with 100 samples and 100
+variables is high dimensional, but not big. By contrast, data with 10
+million observations and 100 variables is big, but not high
+dimensional.</p>
+<p><code>plmmr</code> is optimized for data that are high dimensional –
+the methods we are using to estimate relatedness among observations
+perform best when there are a high number of features relative to the
+number of observations.</p>
+<p><code>plmmr</code> is also designed to accommodate data that is too
+large to analyze in-memory. We accommodate such data through
+file-backing (as described above). Our current analysis pipeline works
+well for data files up to about 40 Gb in size. In practice, this means
+that <code>plmmr</code> is equipped to analyze GWAS data, but not
+biobank-sized data.</p>
+</div>
+</div>
+<div id="data-input-types" class="section level2">
+<h2>Data input types</h2>
+<p><code>plmmr</code> currently works with three types of data
+input:</p>
+<ol style="list-style-type: decimal">
+<li><p>Data that is stored in-memory as a matrix or data frame</p></li>
+<li><p>Data that is stored in PLINK files</p></li>
+<li><p>Data that is stored in delimited files</p></li>
+</ol>
+<div id="example-data-sets" class="section level3">
+<h3>Example data sets</h3>
+<p><code>plmmr</code> currently includes three example data sets, one
+for each type of data input.</p>
+<ul>
+<li><p>The <code>admix</code> data is our example of matrix input data.
+<code>admix</code> is a small data set (197 observations, 100 SNPs) that
+describes individuals of different ancestry groups. The outcome of
+<code>admix</code> is simulated to include population structure effects
+(<em>i.e.</em> race/ethnicity have an impact on the SNP associations).
+This data set is available as whenever <code>library(plmmr)</code> is
+called. An example analysis with the <code>admix</code> data is
+available in
+<code>vignette(&#39;matrix_data&#39;, package = &quot;plmmr&quot;)</code>.</p></li>
+<li><p>The <code>penncath_lite</code> data is our example of PLINK input
+data. <code>penncath_lite</code> (data on coronary artery disease from
+the <a href="https://pubmed.ncbi.nlm.nih.gov/21239051/">PennCath
+study</a>) is a high dimensional data set (1401 observations, 4217 SNPs)
+with several health outcomes as well as age and sex information. The
+features in this data set represent a small subset of a much larger GWAS
+data set (the original data has over 800K SNPs). For for information on
+this data set, refer to the <a href="https://pubmed.ncbi.nlm.nih.gov/21239051/">original
+publication</a>. An example analysis with the <code>penncath_lite</code>
+data is available in
+<code>vignette(&#39;plink_files&#39;, package = &quot;plmmr&quot;)</code>.</p></li>
+<li><p>The <code>colon2</code> data is our example of delimited-file
+input data. <code>colon2</code> is a variation of the <code>colon</code>
+data included in the <a href="https://pbreheny.github.io/biglasso/">biglasso</a> package.
+<code>colon2</code> has 62 observations and 2,001 features representing
+a study of colon disease. 2000 features are original to the data, and
+the ‘sex’ feature is simulated. An example analysis with the
+<code>colon2</code> data is available in
+<code>vignette(&#39;delim_files&#39;, package = &quot;plmmr&quot;)</code>.</p></li>
+</ul>
+</div>
+</div>
+
+
+
+<!-- code folding -->
+
+
+<!-- dynamically load mathjax for compatibility with self-contained -->
+<script>
+  (function () {
+    var script = document.createElement("script");
+    script.type = "text/javascript";
+    script.src  = "https://mathjax.rstudio.com/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML";
+    document.getElementsByTagName("head")[0].appendChild(script);
+  })();
+</script>
+
+</body>
+</html>
