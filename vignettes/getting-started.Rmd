@@ -23,9 +23,7 @@ library(plmmr)
 
 ## Introduction 
 
-`plmmr` is a package for fitting **P**enalized **L**inear **M**ixed **M**odels in **R**. This package was created for the purpose of fitting penalized regression models to high dimensional data in which the observations are correlated in some complex way. For instance, this kind of data arises often in the context of genetics (*e.g.*, GWAS dealing with population structure/family structure).
-
-For more information on the theoretical context of penalized regression, check out [these online course notes](https://myweb.uiowa.edu/pbreheny/7240/s23/notes.html); the section on ridge regression may be a good place to start. 
+`plmmr` is a package for fitting **P**enalized **L**inear **M**ixed **M**odels in **R**. This package was created for the purpose of fitting penalized regression models to high dimensional data in which the observations are correlated. For instance, this kind of data arises often in the context of genetics (*e.g.*, GWAS in which there is population structure and/or family grouping).
 
 The novelties of `plmmr` are:
 
@@ -34,6 +32,21 @@ The novelties of `plmmr` are:
 (2) **Accessibility**: `plmmr` can be run from an `R` session on a typical desktop or laptop computer. The user does not need access to a supercomputer or have experience with the command line in order to fit models `plmmr`. 
 
 (3) **Handling correlation**: `plmmr` uses a transformation that (1) measures correlation among samples and (2) uses this correlation measurement to improve predictions (via the best linear unbiased predictor, or BLUP). This means that in `plmm()`, there's no need to filter data down to a 'maximum subset of unrelated samples.'
+
+## Minimal example
+
+Below is a minimal reproducible example of how `plmmr` can be used: 
+
+```{r}
+# library(plmmr)
+fit <- plmm(admix$X, admix$y) # admix data ships with package
+plot(fit)
+
+cvfit <- cv_plmm(admix$X, admix$y)
+plot(cvfit)
+summary(cvfit)
+```
+
 
 ## Computational capability
 

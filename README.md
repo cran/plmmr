@@ -1,7 +1,7 @@
 <!-- badges: start -->
-
-[![GitHub version](https://img.shields.io/static/v1?label=GitHub&message=3.2.0.0&color=blue&logo=github)](https://github.com/pbreheny/plmmr) [![R-CMD-check](https://github.com/pbreheny/plmmr/workflows/R-CMD-check/badge.svg)](https://github.com/pbreheny/plmmr/actions) [![Codecov test coverage](https://codecov.io/gh/pbreheny/plmmr/branch/master/graph/badge.svg)](https://app.codecov.io/gh/pbreheny/plmmr?branch=master)
-
+[![GitHub version](https://img.shields.io/static/v1?label=GitHub&message=4.1.0.0&color=blue&logo=github)](https://github.com/pbreheny/plmmr) 
+[![R-CMD-check](https://github.com/pbreheny/plmmr/workflows/R-CMD-check/badge.svg)](https://github.com/pbreheny/plmmr/actions) 
+[![Codecov test coverage](https://codecov.io/gh/pbreheny/plmmr/branch/master/graph/badge.svg)](https://app.codecov.io/gh/pbreheny/plmmr?branch=master)
 <!-- badges: end -->
 
 ## plmmr <img src="man/figures/plmmr_hex_sticker.png" align="right" width="150"/>
@@ -10,13 +10,33 @@ The `plmmr` (**p**enalized **l**inear **m**ixed **m**odels in **R**) package con
 
 ## Installation
 
-To install the latest version of the package:
+To install the latest version of the package from GitHub, use this:
 
 ``` r
 devtools::install_github("pbreheny/plmmr")
 ```
 
+You can also install `plmmr` from CRAN: 
+
+```r
+install.packages('plmmr')
+```
+
 For a description of the motivation of the functions in this package (along with examples) refer to the second module of [this GWAS data tutorial](https://pbreheny.github.io/adv-gwas-tutorial/index.html)
+
+## Minimal example
+
+``` r
+library(plmmr)
+X <- rnorm(100*20) |> matrix(100, 20)
+y <- rnorm(100)
+fit <- plmm(X, y) 
+plot(fit)
+
+cvfit <- cv_plmm(X, y)
+plot(cvfit)
+summary(cvfit)
+```
 
 ## So how fast is `plmmr`? And how well does it scale?
 
