@@ -14,44 +14,9 @@
 #' @param lambda A user-specified sequence of lambda values. By default, a sequence of values of length nlambda is computed, equally spaced on the log scale.
 #' @param eps Convergence threshold. The algorithm iterates until the RMSD for the change in linear predictors for each coefficient is less than eps. Default is \code{1e-4}.
 #' @param max_iter Maximum number of iterations (total across entire path). Default is 10000.
-#' @param convex (future idea; not yet incorporated) convex Calculate index for which objective function ceases to be locally convex? Default is TRUE.
-#' @param dfmax (future idea; not yet incorporated) Upper bound for the number of nonzero coefficients. Default is no upper bound. However, for large data sets, computational burden may be heavy for models with a large number of nonzero coefficients.
 #' @param init Initial values for coefficients. Default is 0 for all columns of X.
 #' @param warn Return warning messages for failures to converge and model saturation? Default is TRUE.
-#' @param returnX Return the standardized design matrix along with the fit? By default, this option is turned on if X is under 100 MB, but turned off for larger matrices to preserve memory.
 #' @param ... Additional arguments that can be passed to `biglasso::biglasso_simple_path()`
-#'
-#' @returns  A list with these components:
-#'   * std_scale_beta: the coefficients estimated on the scale of `std_X`
-#'   * centered_y: the y-values that are 'centered' to have mean 0
-#'   * s and U, the values and vectors from the eigendecomposition of K
-#'   * lambda: vector of tuning parameter values
-#'   * linear_predictors: the product of `stdrot_X` and `b`
-#'    (linear predictors on the transformed and restandardized scale)
-#'   * eta: a number (double) between 0 and 1 representing the estimated
-#'    proportion of the variance in the outcome attributable to population/correlation
-#'    structure.
-#'   * iter: numeric vector with the number of iterations needed in model fitting
-#'    for each value of `lambda`
-#'   * converged: vector of logical values indicating whether the model fitting
-#'    converged at each value of `lambda`
-#'   * loss: vector with the numeric values of the loss at each value of `lambda`
-#'    (calculated on the ~rotated~ scale)
-#'   * penalty: character string indicating the penalty with which the model was
-#'    fit (e.g., 'MCP')
-#'   * penalty_factor: vector of indicators corresponding to each predictor,
-#'    where 1 = predictor was penalized.
-#'   * gamma: numeric value indicating the tuning parameter used for the SCAD or
-#'    lasso penalties was used. Not relevant for lasso models.
-#'   * alpha: numeric value indicating the elastic net tuning parameter.
-#'   * ns: the indices for the nonsingular values of X
-#'   * feature_names: formatted column names of the design matrix
-#'   * nlambda: number of lambda values used in model fitting
-#'   * eps: tolerance ('epsilon') used for model fitting
-#'   * max_iter: max. number of iterations per model fit
-#'   * warn: logical - should warnings be given if model fit does not converge?
-#'   * init: initial values for model fitting
-#'   * trace: logical - should messages be printed to the console while models are fit?
 #'
 #' @keywords internal
 #'
@@ -70,11 +35,8 @@ plmm_fit <- function(prep,
                      lambda,
                      eps = 1e-04,
                      max_iter = 10000,
-                     convex = TRUE,
-                     dfmax = NULL,
                      init = NULL,
                      warn = TRUE,
-                     returnX = TRUE,
                      ...){
 
   # error checking ------------------------------------------------------------
@@ -90,7 +52,7 @@ plmm_fit <- function(prep,
     w <- (prep$eta * prep$s + (1 - prep$eta))^(-1/2)
     wUt <- sweep(x = t(prep$U), MARGIN = 1, STATS = w, FUN = "*")
     rot_X <- wUt %*% prep$std_X
-    rot_y <- wUt %*% prep$centered_y # remember: prep$y is the centered outcome vector
+    rot_y <- wUt %*% prep$centered_y # remember: we're using the centered outcome vector
 
     # re-standardize rot_X
     stdrot_info <- standardize_in_memory(rot_X)
@@ -137,7 +99,6 @@ plmm_fit <- function(prep,
 
   if(!fbm_flag){
     r <- drop(rot_y - stdrot_X %*% init)
-    linear_predictors <- matrix(NA, nrow = nrow(stdrot_X), ncol=nlambda)
     stdrot_scale_beta <- matrix(NA, nrow=ncol(stdrot_X), ncol=nlambda)
   } else {
     r <- rot_y - stdrot_X%*%as.matrix(init) # again, using bigalgebra method here
@@ -168,11 +129,9 @@ plmm_fit <- function(prep,
                             eps = eps,
                             max.iter = max_iter,
                             penalty.factor = penalty_factor,
-                            # dfmax = dfmax,
                             warn = warn)
 
       stdrot_scale_beta[, ll] <- init <- res$beta
-      linear_predictors[,ll] <- stdrot_X%*%(res$beta)
       iter[ll] <- res$iter
       converged[ll] <- ifelse(res$iter < max_iter, TRUE, FALSE)
       loss[ll] <- res$loss
@@ -180,6 +139,7 @@ plmm_fit <- function(prep,
       if(prep$trace){utils::setTxtProgressBar(pb, ll)}
     }
     if(prep$trace) close(pb)
+
     # reverse the POST-ROTATION standardization on estimated betas
     std_scale_beta <- matrix(0,
                              nrow = nrow(stdrot_scale_beta) + 1,
@@ -189,6 +149,10 @@ plmm_fit <- function(prep,
     bb <-  stdrot_scale_beta/(stdrot_unscale)
     std_scale_beta[-1,] <- bb
     std_scale_beta[1,] <- mean(y) - crossprod(stdrot_X_details$center, bb)
+
+    # calculate linear predictors on the scale of std_X
+    std_Xbeta <- prep$std_X %*% bb
+    std_Xbeta <- sweep(std_Xbeta, 2, std_scale_beta[1,], "+")
 
   } else {
     res <- biglasso::biglasso_path(
@@ -204,11 +168,9 @@ plmm_fit <- function(prep,
       eps = eps,
       max.iter = max_iter,
       penalty.factor = penalty_factor,
-      # dfmax = dfmax,
       ...)
 
     stdrot_scale_beta <- res$beta
-    linear_predictors <- stdrot_X %*% stdrot_scale_beta
 
     iter <- res$iter
     converged <- ifelse(iter < max_iter, TRUE, FALSE)
@@ -226,6 +188,9 @@ plmm_fit <- function(prep,
     std_scale_beta[-1,] <- bb
     std_scale_beta[1,] <- mean(y) - crossprod(stdrot_X_details$center, bb)
 
+    # calculate linear predictors on the scale of std_X
+    std_Xbeta <- prep$std_X %*% bb
+    std_Xbeta <- sweep(std_Xbeta, 2, std_scale_beta[1,], "+")
   }
 
   if (prep$trace) {
@@ -241,12 +206,13 @@ plmm_fit <- function(prep,
   if (warn & sum(iter) == max_iter) warning("Maximum number of iterations reached")
 
   ret <- structure(list(
+    y = y,
     std_scale_beta = std_scale_beta,
-    centered_y = prep$centered_y, # note: this is the centered outcome vector
+    std_Xbeta = std_Xbeta,
+    centered_y = prep$centered_y, # the centered outcome vector
     s = prep$s,
     U = prep$U,
     lambda = lambda,
-    linear_predictors = linear_predictors,
     penalty = penalty,
     penalty_factor = penalty_factor,
     iter = iter,
@@ -260,6 +226,10 @@ plmm_fit <- function(prep,
     max_iter = max_iter,
     warn = warn,
     trace = prep$trace))
+
+  if (fbm_flag){
+    ret$std_X <- bigmemory::describe(prep$std_X)
+  }
 
   return(ret)
 }

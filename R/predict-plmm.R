@@ -7,15 +7,13 @@
 #'                  **Note**: Columns of this argument must be named!
 #' @param type      A character argument indicating what type of prediction should be
 #'                  returned. Options are "lp," "coefficients," "vars," "nvars," and "blup." See details.
+#' @param X         Optional: if \code{type = 'blup'} and the model was fit in-memory, the design matrix used to fit the model represented in \code{object} must be supplied.
+#'                  When supplied, this design matrix will be standardized using the center/scale values in \code{object$std_X_details}, so please **do not** standardize this matrix before supplying here.
+#'                  **Note**: If the model was fit file-backed, then the filepath to the .bk file with this standardized design matrix is returned as 'std_X' in the fit supplied to 'object'.
 #' @param lambda    A numeric vector of regularization parameter \code{lambda} values
 #'                  at which predictions are requested.
 #' @param idx       Vector of indices of the penalty parameter \code{lambda} at which
 #'                  predictions are required. By default, all indices are returned.
-#' @param X         Original design matrix (not including intercept column)
-#'                  from object. Required only if \code{type == 'blup'} and object is too large to be
-#'                  returned in `plmm` object.
-#' @param y         Original continuous outcome vector from object.
-#'                  Required only if \code{type == 'blup'}.
 #' @param ...       Additional optional arguments
 #'
 #' @details
@@ -52,10 +50,14 @@
 #'
 #' # make predictions for all lambda values
 #'  pred1 <- predict(object = fit, newX = test$X, type = "lp")
+#'  pred2 <- predict(object = fit, newX = test$X, type = "blup", X = train$X)
 #'
 #' # look at mean squared prediction error
 #' mspe <- apply(pred1, 2, function(c){crossprod(test$y - c)/length(c)})
 #' min(mspe)
+#'
+#' mspe_blup <- apply(pred2, 2, function(c){crossprod(test$y - c)/length(c)})
+#' min(mspe_blup) # BLUP is better
 #'
 #' # compare the MSPE of our model to a null model, for reference
 #' # null model = intercept only -> y_hat is always mean(y)
@@ -64,41 +66,23 @@
 #'
 predict.plmm <- function(object,
                          newX,
-                         type=c("lp", "coefficients", "vars", "nvars", "blup"),
+                         type=c("blup", "coefficients", "vars", "nvars", "lp"),
+                         X = NULL,
                          lambda,
                          idx=1:length(object$lambda),
-                         X,
-                         y,
                          ...) {
-
-  # object type checks
-  if (!missing(X)){
-    if (!identical(class(X), class(newX))) {
-      stop("\nFor now, the classes of X and newX must match (we plan to extend/enhance this
-           further in the future). bigstatsr::as_FBM() and/or bigmemory::as.big.matrix()
-           if you need to convert the type of one of your matrices.")
-    }
-  }
-
 
   # if predictions are to be made, make sure X is in the correct format...
   if (!missing(newX)){
-    # case 1: newX is an FBM
-    if (inherits(newX,"FBM")){
-      fbm_flag <- TRUE
-      # convert to big.matrix (FBM cannot multiply with dgCMatrix type of beta_vals)
-      newX <- fbm2bm(newX)
-    } else if (inherits(newX, "big.matrix")){
-      # case 2: newX is a big.matrix
+    # case 1: newX is a big.matrix
+    if (inherits(newX, "big.matrix")){
       fbm_flag <- TRUE
     } else {
-      # case 3: X is in-memory
+      # case 2: X is in-memory
       fbm_flag <- FALSE
     }
-
   }
-
-  # check format for beta_vals
+  # check format for beta values
   ifelse(inherits(object$beta_vals, "Matrix"),
          sparse_flag <- TRUE,
          sparse_flag <- FALSE)
@@ -106,8 +90,8 @@ predict.plmm <- function(object,
   # prepare other arguments
   type <- match.arg(type)
   beta_vals <- coef(object, lambda, which=idx, drop=FALSE) # includes intercept
-  p <- nrow(beta_vals)
-  n <- nrow(object$linear_predictors)
+  p <- nrow(beta_vals)-1
+  n <- nrow(object$std_Xbeta)
 
   # addressing each type:
 
@@ -117,25 +101,62 @@ predict.plmm <- function(object,
 
   if (type=="vars") return(drop(apply(beta_vals[-1, , drop=FALSE]!=0, 2, FUN=which))) # don't count intercept
 
-    a <- beta_vals[1,]
-    b <- beta_vals[-1,,drop=FALSE]
-    Xb <- sweep(newX %*% b, 2, a, "+")
+  # calculate linear predictors with new data
+  a <- beta_vals[1,]
+  b <- beta_vals[-1,,drop=FALSE]
+  Xb <- sweep(newX %*% b, 2, a, "+")
 
-  if (type=="lp") return(drop(Xb))
+  if (type=="lp") {
+    return(drop(Xb))
+  }
 
-  if (type == "blup"){ # assuming eta of X and newX are the same
-    if (fbm_flag) stop("\nBLUP prediction outside of cross-validation is not yet implemented for filebacked data. This will be available soon.")
-    if (missing(X)) stop("The design matrix is required for BLUP calculation. Please supply the no-intercept design matrix to the X argument.")
-    if (missing(y)) stop("The vector of outcomes is required for BLUP calculation. Please either supply it to the y argument")
+  # Note: the BLUP is constructed on the scale of the standardized model-fitting data;
+  #   This is the scale at which object$K was constructed
+  if (type == "blup"){
+    # check for missing arguments
+    if (!fbm_flag & is.null(X)) stop("If type = 'blup' and the data used to fit the model were stored in-memory, then the X argument must be supplied.\n")
 
-    # check dimensions -- must have same number of features
-    if (ncol(X) != ncol(newX)){stop("\nX and newX do not have the same number of features - please make these align")}
+    # Check for singularity -- this keeps us from scaling by a 0 value
+    # Note: singular values have estimated coefficients of 0 at all values of lambda,
+    #  so these columns are not included in the predictions
+    singular <- setdiff(seq(1:length(object$std_X_details$center)),
+                        object$std_X_details$ns)
+    if (length(singular) >= 1) object$std_X_details$scale[singular] <- 1
+
+    # Use center/scale values from the X in the model fit to standardize both X and newX -
+    # This is *key* -- the components of the estimated Sigma must be consistently scaled, and
+    # Sigma_11 is always calculated using *standardized* data.
+    if (fbm_flag) {
+      std_X <- bigmemory::attach.big.matrix(object$std_X)
+      std_test_info <- .Call("big_std",
+                             newX@address,
+                             as.integer(count_cores()),
+                             object$std_X_details$center,
+                             object$std_X_details$scale,
+                             PACKAGE = "plmmr")
+      newX@address <- std_test_info$std_X # now, newX is standardized
+    } else {
+      std_X <- scale(X,
+                     center = object$std_X_details$center,
+                     scale = object$std_X_details$scale)
+      std_newX <- scale(newX,
+                        center = object$std_X_details$center,
+                        scale = object$std_X_details$scale)
+    }
 
     Sigma_11 <- construct_variance(fit = object)
-    Sigma_21 <- object$eta * (1/p) * tcrossprod(newX, X) # same as Sigma_21_check
-    Xb_old <- sweep(X %*% b, 2, a, "+")
-    resid_old <- drop(y) - Xb_old
-
+    if (fbm_flag) {
+      const <- (object$eta/ncol(newX))
+      XXt <- bigalgebra::dgemm(TRANSA = 'N',
+                               TRANSB = 'T',
+                               A = newX,
+                               B = std_X)
+      Sigma_21 <- const*XXt
+      Sigma_21 <- Sigma_21[,] # convert to in-memory matrix
+    } else {
+      Sigma_21 <- object$eta*(1/p)*tcrossprod(std_newX, std_X)
+    }
+    resid_old <- drop(object$y) - object$std_Xbeta
     ranef <- Sigma_21 %*% (chol2inv(chol(Sigma_11)) %*% resid_old)
     blup <- drop(Xb + ranef)
 

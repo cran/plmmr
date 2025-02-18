@@ -8,7 +8,6 @@
 #' @keywords internal
 #'
 construct_variance <- function(fit, K = NULL, eta = NULL){
-
   # if 'fit' is given
   if (!missing(fit)){
     K <- fit$K
@@ -18,8 +17,8 @@ construct_variance <- function(fit, K = NULL, eta = NULL){
     } else {
       # case 2: K is a list with U,s
       SUt <- sweep(t(K$U), MARGIN = 1, STATS = K$s, FUN = "*")
-      K <- K$U%*%SUt
-      Sigma_hat <- (fit$eta * K) + ((1-fit$eta) * diag(nrow(K)))
+      K_mat <- K$U%*%SUt
+      Sigma_hat <- (fit$eta * K_mat) + ((1-fit$eta) * diag(nrow(K_mat)))
     }
   } else if (!is.null(K) & !is.null(eta)) {
     if (is.matrix(K)){

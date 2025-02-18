@@ -3,11 +3,17 @@
 #' @param fit A list of parameters describing the output of a model constructed with \code{plmm_fit}
 #' @param p The number of features in the original data (including constant features)
 #' @param std_X_details A list with 3 items:
-#'  * 'center': the centering values for the columns of `X`
-#'  * 'scale': the scaling values for the non-singular columns of `X`
-#'  * 'ns': indicesof nonsingular columns in `std_X`
+#'                    * 'center': the centering values for the columns of `X`
+#'                    * 'scale': the scaling values for the non-singular columns of `X`
+#'                    * 'ns': indicesof nonsingular columns in `std_X`
 #' @param fbm_flag Logical: is the corresponding design matrix filebacked? Passed from `plmm()`.
-#'
+#' @param plink_flag Logical: did these data come from PLINK files?
+#'                    **Note**: This flag matters because of how non-genomic features
+#'                    are handled for PLINK files -- in data from PLINK files,
+#'                    unpenalized columns are *not* counted in the `p` argument. For delimited
+#'                    files, `p` does include unpenalized columns. This difference has
+#'                    implications for how the `untransform()` function determines the
+#'                    appropriate dimensions for the estimated coefficient matrix it returns.
 #' @returns A list with the components:
 #'  * `beta_vals`: the matrix of estimated coefficients on the original scale. Rows are predictors, columns are values of `lambda`
 #'  * `lambda`: a numeric vector of the lasso tuning parameter values used in model fitting.
@@ -27,35 +33,42 @@
 #'
 #' @keywords internal
 
-plmm_format <- function(fit, p, std_X_details, fbm_flag){
-
+plmm_format <- function(fit, p, std_X_details, fbm_flag, plink_flag){
   # get beta values back in original scale; reverse the PRE-ROTATION standardization
   og_scale_beta <- untransform(
     std_scale_beta = fit$std_scale_beta,
     p = p,
     std_X_details = std_X_details,
-    fbm_flag = fbm_flag)
+    fbm_flag = fbm_flag,
+    plink_flag = plink_flag)
 
   # give the matrix of beta_values readable names
   # features on the rows, lambda values on the columns
+  colnames(og_scale_beta) <- colnames(fit$std_Xbeta) <- lam_names(fit$lambda)
 
-  colnames(og_scale_beta) <- colnames(fit$linear_predictors) <- lam_names(fit$lambda)
+  # output (19 items)
+  out <- list(
+    beta_vals = og_scale_beta,
+    std_Xbeta = fit$std_Xbeta,
+    std_X_details = std_X_details,
+    y = fit$y,
+    p = p, # (need to hold onto the total number of features in the original data)
+    plink_flag = plink_flag,
+    lambda = fit$lambda,
+    eta = fit$eta,
+    penalty = fit$penalty,
+    gamma = fit$gamma,
+    alpha = fit$alpha,
+    loss = fit$loss,
+    penalty_factor = fit$penalty_factor,
+    ns_idx = c(1, 1 + std_X_details$ns), # NOTE: this indexing is *very* important
+    iter = fit$iter,
+    converged = fit$converged,
+    K = list(s = fit$s, U = fit$U))
 
+  if (fbm_flag){
+    out$std_X <- fit$std_X
+  }
 
-# output
-structure(list(
-  beta_vals = og_scale_beta,
-  lambda = fit$lambda,
-  eta = fit$eta,
-  linear_predictors = fit$linear_predictors,
-  penalty = fit$penalty,
-  gamma = fit$gamma,
-  alpha = fit$alpha,
-  loss = fit$loss,
-  penalty_factor = fit$penalty_factor,
-  ns_idx = c(1, 1 + fit$ns), # PAY ATTENTION HERE!
-  iter = fit$iter,
-  converged = fit$converged,
-  K = list(s = fit$s, U = fit$U)),
-  class = "plmm")
+  structure(out, class = "plmm")
 }

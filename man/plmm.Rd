@@ -2,7 +2,7 @@
 % Please edit documentation in R/plmm.R
 \name{plmm}
 \alias{plmm}
-\title{Fit a linear mixed model via non-convex penalized maximum likelihood.}
+\title{Fit a linear mixed model via penalized maximum likelihood.}
 \usage{
 plmm(
   design,
@@ -14,18 +14,15 @@ plmm(
   init = NULL,
   gamma,
   alpha = 1,
-  dfmax = NULL,
   lambda_min,
   nlambda = 100,
   lambda,
   eps = 1e-04,
   max_iter = 10000,
-  convex = TRUE,
   warn = TRUE,
   trace = FALSE,
   save_rds = NULL,
-  compact_save = FALSE,
-  return_fit = NULL,
+  return_fit = TRUE,
   ...
 )
 }
@@ -57,8 +54,6 @@ Note: plmm() does not check to see if a matrix is diagonal. If you want to use a
 
 \item{alpha}{Tuning parameter for the Mnet estimator which controls the relative contributions from the MCP/SCAD penalty and the ridge, or L2 penalty. alpha=1 is equivalent to MCP/SCAD penalty, while alpha=0 would be equivalent to ridge regression. However, alpha=0 is not supported; alpha may be arbitrarily small, but not exactly 0.}
 
-\item{dfmax}{(\strong{Future idea; not yet incorporated}): Upper bound for the number of nonzero coefficients. Default is no upper bound. However, for large data sets, computational burden may be heavy for models with a large number of nonzero coefficients.}
-
 \item{lambda_min}{The smallest value for lambda, as a fraction of lambda.max. Default is .001 if the number of observations is larger than the number of covariates and .05 otherwise.}
 
 \item{nlambda}{Length of the sequence of lambda. Default is 100.}
@@ -69,56 +64,66 @@ Note: plmm() does not check to see if a matrix is diagonal. If you want to use a
 
 \item{max_iter}{Maximum number of iterations (total across entire path). Default is 10000.}
 
-\item{convex}{(\strong{Future idea; not yet incorporated}): Calculate index for which objective function ceases to be locally convex? Default is TRUE.}
-
 \item{warn}{Return warning messages for failures to converge and model saturation? Default is TRUE.}
 
 \item{trace}{If set to TRUE, inform the user of progress by announcing the beginning of each step of the modeling process. Default is FALSE.}
 
 \item{save_rds}{Optional: if a filepath and name \emph{without} the '.rds' suffix is specified (e.g., \code{save_rds = "~/dir/my_results"}), then the model results are saved to the provided location (e.g., "~/dir/my_results.rds").
-Defaults to NULL, which does not save the result.}
-
-\item{compact_save}{Optional: if TRUE, three separate .rds files will saved: one with the 'beta_vals', one with 'K', and one with everything else (see below).
-Defaults to FALSE. \strong{Note}: you must specify \code{save_rds} for this argument to be called.}
+Accompanying the RDS file is a log file for documentation, e.g., "~/dir/my_results.log".
+Defaults to NULL, which does not save any RDS or log files.}
 
 \item{return_fit}{Optional: a logical value indicating whether the fitted model should be returned as a \code{plmm} object in the current (assumed interactive) session.
-Defaults to TRUE for in-memory data, and defaults to FALSE for filebacked data.}
+Defaults to TRUE.}
 
 \item{...}{Additional optional arguments to \code{plmm_checks()}}
 }
 \value{
-A list which includes:
+A list which includes 19 items:
 \itemize{
-\item beta_vals: the matrix of estimated coefficients on the original scale. Rows are predictors, columns are values of \code{lambda}
-\item rotated_scale_beta_vals: the matrix of estimated coefficients on the ~rotated~ scale. This is the scale on which the model was fit.
-\item lambda: a numeric vector of the lasso tuning parameter values used in model fitting.
-\item eta: a number (double) between 0 and 1 representing the estimated proportion of the variance in the outcome attributable to population/correlation structure
-\item linear_predictors: the matrix resulting from the product of \code{stdrot_X} and the estimated coefficients on the ~rotated~ scale.
-\item penalty: character string indicating the penalty with which the model was fit (e.g., 'MCP')
-\item gamma: numeric value indicating the tuning parameter used for the SCAD or lasso penalties was used. Not relevant for lasso models.
-\item alpha: numeric value indicating the elastic net tuning parameter.
-\item loss: vector with the numeric values of the loss at each value of \code{lambda} (calculated on the ~rotated~ scale)
-\item penalty_factor: vector of indicators corresponding to each predictor, where 1 = predictor was penalized.
-\item ns_idx: vector with the indices of predictors which were non-singular features (i.e., features which had variation).
-\item iter: numeric vector with the number of iterations needed in model fitting for each value of \code{lambda}
-\item converged: vector of logical values indicating whether the model fitting converged at each value of \code{lambda}
+\item beta_vals: The matrix of estimated coefficients. Rows are predictors (with the first row being the intercept), and columns are values of \code{lambda}.
+\item std_Xbeta: A matrix of the linear predictors on the scale of the standardized design matrix. Rows are predictors, columns are values of \code{lambda}.
+\strong{Note}: std_Xbeta will not include rows for the intercept or for constant features.
+\item std_X_details: A list with 9 items:
+- center: The center values used to center the columns of the design matrix
+- scale: The scaling values used to scale the columns of the design matrix
+- ns: An integer vector of the nonsingular columns of the original data
+- unpen: An integer vector of indices of the unpenalized features, if any were specified in the design
+- unpen_colnames: A charater vector of the column names of ay unpenalized features.
+- X_colnames: A character vector with the column names of all features in the original design matrix
+- X_rownames: A character vector with the row names of all features in the original design matrix; if none were provided, these are named 'row1', 'row2', etc.
+- std_X_colnames: A subset of X_colnames representing only nonsignular columns (i.e., the columns indexed by 'ns')
+- std_X_rownames: A subset of X_rownames representing rows that passed QC filtering & and are represented in both the genotype and phenotype data sets (this only applies to PLINK data)
+\item std_X: If design matrix is filebacked, the descriptor for the filebacked data is returned using \code{bigmemory::describe()}. If the the data were stored in-memory, nothing is returned (std_X is NULL).
+\item y: The outcome vector used in model fitting.
+\item p: The total number of columns in the design matrix (including any singular columns, excluding the intercept).
+\item plink_flag: Logical - did the data come from PLINK files?
+\item lambda: A numeric vector of the tuning parameter values used in model fitting.
+\item eta: A double between 0 and 1 representing the estimated proportion of the variance in the outcome attributable to population/correlation structure
+\item penalty: A character string indicating the penalty with which the model was fit (e.g., 'MCP')
+\item gamma: A numeric value indicating the tuning parameter used for the SCAD or lasso penalties was used. Not relevant for lasso models.
+\item alpha: A numeric value indicating the elastic net tuning parameter.
+\item loss: A vector with the numeric values of the loss at each value of \code{lambda} (calculated on the ~rotated~ scale)
+\item penalty_factor: A vector of indicators corresponding to each predictor, where 1 = predictor was penalized.
+\item ns_idx: An integer vector with the indices of predictors which were non-singular features (i.e., features which had variation), where feature 1 is the intercept.
+\item iter: An integer vector with the number of iterations needed in model fitting for each value of \code{lambda}
+\item converged: A vector of logical values indicating whether the model fitting converged at each value of \code{lambda}
 \item K: a list with 2 elements, \code{s} and \code{U} ---
 \itemize{
-\item s: a vector of the eigenvalues of the relatedness matrix; see \code{relatedness_mat()} for details.
+\item s: a vector of the eigenvalues of the relatedness matrix K (note: K is the kinship matrix for genetic/genomic data; see the article on notation for details)
 \item U: a matrix of the eigenvectors of the relatedness matrix
 }
 }
 }
 \description{
-Fit a linear mixed model via non-convex penalized maximum likelihood.
+Fit a linear mixed model via penalized maximum likelihood.
 }
 \examples{
 # using admix data
 admix_design <- create_design(X = admix$X, y = admix$y)
-fit_admix1 <- plmm(design = admix_design)
-s1 <- summary(fit_admix1, idx = 50)
-print(s1)
-plot(fit_admix1)
+fit <- plmm(design = admix_design)
+s <- summary(fit, idx = 50)
+print(s)
+plot(fit)
 
 # Note: for examples with large data that are too big to fit in memory,
 # see the article "PLINK files/file-backed matrices" on our website

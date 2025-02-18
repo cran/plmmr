@@ -6,7 +6,6 @@
 #' @param fold n-length vector of fold-assignments.
 #' @param type A character argument indicating what should be returned from predict.plmm. If \code{type == 'lp'} predictions are based on the linear predictor, \code{$X beta$}. If \code{type == 'individual'} predictions are based on the linear predictor plus the estimated random effect (BLUP).
 #' @param cv_args List of additional arguments to be passed to plmm.
-#' @param estimated_Sigma Estimated variance-covariance matrix using all observations when computing BLUP; NULL if type = "lp" in cv_plmm.
 #' @param ... Optional arguments to `predict_within_cv`
 #'
 #' @keywords internal
@@ -16,8 +15,7 @@
 #' * a numeric value indicating the number of lambda values used
 #' * a numeric value with the predicted outcome (y hat) values at each lambda
 #'
-cvf <- function(i, fold, type, cv_args, estimated_Sigma, ...) {
-
+cvf <- function(i, fold, type, cv_args, ...) {
   # save the 'prep' object from the plmm_prep() in cv_plmm
   full_cv_prep <- cv_args$prep
 
@@ -27,6 +25,7 @@ cvf <- function(i, fold, type, cv_args, estimated_Sigma, ...) {
   # make list to hold the data for this particular fold:
   fold_args <- list(std_X_details = list(),
                     fbm_flag = cv_args$fbm_flag,
+                    plink_flag = cv_args$plink_flag,
                     penalty = cv_args$penalty,
                     penalty_factor = cv_args$penalty_factor,
                     gamma = cv_args$gamma,
@@ -36,8 +35,6 @@ cvf <- function(i, fold, type, cv_args, estimated_Sigma, ...) {
                     max_iter = cv_args$max_iter,
                     eps = cv_args$eps,
                     warn = cv_args$warn,
-                    convex = cv_args$convex,
-                    dfmax = cv_args$dfmax,
                     lambda = cv_args$lambda)
 
   # subset std_X, U, and y to match fold indices ------------------------
@@ -64,46 +61,48 @@ cvf <- function(i, fold, type, cv_args, estimated_Sigma, ...) {
                                            backingpath = bigmemory::dir.name(full_cv_prep$std_X))
 
     # re-scale data & check for singularity
-    train_data <- .Call("big_std",
+    std_trainX_info <- .Call("big_std",
                         fold_args$std_X@address,
                         as.integer(count_cores()),
+                        NULL,
+                        NULL,
                         PACKAGE = "plmmr")
 
-    fold_args$std_X@address <- train_data$std_X
-    fold_args$std_X_details$center <- train_data$std_X_center
-    fold_args$std_X_details$scale <- train_data$std_X_scale
-    fold_args$std_X_details$ns <- which(train_data$std_X_scale > 1e-3)
-    singular <- train_data$std_X_scale < 1e-3
+    fold_args$std_X@address <- std_trainX_info$std_X
+    fold_args$std_X_details$center <- std_trainX_info$std_X_center
+    fold_args$std_X_details$scale <- std_trainX_info$std_X_scale
+    fold_args$std_X_details$ns <- which(std_trainX_info$std_X_scale > 1e-3)
+    singular <- std_trainX_info$std_X_scale < 1e-3
 
     # do not fit a model on singular features!
     if (sum(singular) >= 1) fold_args$penalty_factor[singular] <- Inf
 
   } else {
 
-    # subset training data (we will need 2 copies: a copy to pass into the
-    #   fitting function via the 'fold_args' list, and a copy to use
-    #   for prediction. The latter is 'train_X')
-    fold_args$std_X <- train_X <- full_cv_prep$std_X[fold!=i, ,drop=FALSE]
+    # subset training data
+    train_X <- full_cv_prep$std_X[fold!=i, ,drop=FALSE]
 
     # Note: subsetting the data into test/train sets may cause low variance features
     #   to become constant features in the training data. The following lines address this issue
 
     # re-standardize training data & check for singularity
-    std_info <- standardize_in_memory(fold_args$std_X)
+    std_info <- standardize_in_memory(train_X)
     fold_args$std_X <- std_info$std_X
     fold_args$std_X_details <- std_info$std_X_details
 
-    # do not fit a model on these singular features!
+    # do not fit a model on these (near) singular features!
     singular <- fold_args$std_X_details$scale < 1e-3
     if (sum(singular) >= 1) fold_args$penalty_factor[singular] <- Inf
 
   }
-  # re-center y
-  fold_args$centered_y <- full_cv_prep$centered_y[fold!=i] |> scale(scale=FALSE) |> drop()
 
   # subset outcome vector to include outcomes for training data only
-  fold_args$y <- y[fold!=i]
+  fold_args$y <- cv_args$y[fold!=i]
 
+  # center the training outcome
+  fold_args$centered_y <- fold_args$y |>
+    scale(scale=FALSE) |>
+    drop()
   # extract test set --------------------------------------
   # this comes from cv prep on full data
   if (cv_args$fbm_flag){
@@ -132,11 +131,9 @@ cvf <- function(i, fold, type, cv_args, estimated_Sigma, ...) {
                          p = ncol(full_cv_prep$std_X),
                          centered_y = fold_args$centered_y,
                          fbm_flag = fold_args$fbm_flag,
-                         penalty_factor = fold_args$penalty_factor,
+                         eta_star = cv_args$eta_star,
                          trace = cv_args$prep$trace)
-
   fold_args$prep <- fold_prep
-
   # fit a plmm within each fold at each value of lambda
   # lambda stays the same for each fold; comes from the overall fit in cv_plmm()
   if (cv_args$prep$trace) {
@@ -151,49 +148,75 @@ cvf <- function(i, fold, type, cv_args, estimated_Sigma, ...) {
                     penalty = fold_args$penalty,
                     gamma = fold_args$gamma,
                     alpha = fold_args$alpha,
+                    eta_star = cv_args$eta_star,
                     lambda_min = fold_args$lambda_min,
                     nlambda = fold_args$nlambda,
                     lambda = fold_args$lambda,
                     eps = fold_args$eps,
                     max_iter = fold_args$max_iter,
-                    warn = fold_args$warn,
-                    convex = fold_args$convex,
-                    dfmax = ncol(train_X) + 1)
+                    warn = fold_args$warn)
 
-if (any(is.nan(fit.i$std_scale_beta))) browser()
-# if (nrow(fit.i$std_scale_beta) - 1 != length(fold_args$std_X_details$ns)) browser()
-  # get beta values back in original scale
-  og_betas.i <- untransform(
-    std_scale_beta = fit.i$std_scale_beta,
-    p = nrow(fit.i$std_scale_beta)-1, # take off 1 for intercept
-    std_X_details = fold_args$std_X_details,
-    fbm_flag = fold_args$fbm_flag,
-    use_names = FALSE)
+  format.i <- plmm_format(fit = fit.i,
+                          p = ncol(full_cv_prep$std_X),
+                          std_X_details = fold_args$std_X_details,
+                          fbm_flag = fold_args$fbm_flag,
+                          plink_flag = fold_args$plink_flag)
 
+  # prediction ---------------------------------------------------
+  # note: predictions are on the scale of the standardized training data
   if(type == "lp"){
-    yhat <- predict_within_cv(fit = fit.i,
-                              trainX = train_X,
+    yhat <- predict_within_cv(fit = format.i,
                               testX = test_X,
-                              og_scale_beta = og_betas.i,
                               type = 'lp',
                               fbm = cv_args$fbm_flag)
   }
 
   if (type == 'blup'){
-    # estimated_Sigma here comes from the overall fit in cv_plmm.R, an n*n matrix
-    Sigma_21 <- estimated_Sigma[fold==i, fold!=i, drop = FALSE]
-    Sigma_11 <- estimated_Sigma[fold!=i, fold!=i, drop = FALSE]
+    Sigma_11 <- construct_variance(K = fold_prep$K, eta = fit.i$eta)
+    if (cv_args$fbm_flag){
+      # we will need a copy of the testing data that is standardized
+      std_test_X <- bigmemory::deepcopy(full_cv_prep$std_X,
+                                    rows = which(fold==i),
+                                    type = "double",
+                                    backingfile = paste0("std_test_fold",i,".bk"),
+                                    descriptorfile = paste0("std_test_fold",i,".desc"),
+                                    backingpath = bigmemory::dir.name(full_cv_prep$std_X))
 
-    yhat <- predict_within_cv(fit = fit.i,
-                              trainX = train_X,
-                              trainY = fold_args$y,
+      # use center/scale values from train_X to standardize test_X
+      if (length(singular) >= 1) fold_args$std_X_details$scale[singular] <- 1
+      std_test_info <- .Call("big_std",
+                             std_test_X@address,
+                             as.integer(count_cores()),
+                             fold_args$std_X_details$center,
+                             fold_args$std_X_details$scale,
+                             PACKAGE = "plmmr")
+      std_test_X@address <- std_test_info$std_X
+
+      const <- (fit.i$eta/ncol(train_X))
+      XXt <- bigalgebra::dgemm(TRANSA = 'N',
+                               TRANSB = 'T',
+                               A = std_test_X,
+                               B = fold_args$std_X)
+      Sigma_21 <- const*XXt
+      Sigma_21 <- Sigma_21[,] # convert to in-memory matrix
+    } else {
+      # don't rescale columns that were singular features in std_train_X;
+      #   these features will have an estimated beta of 0 anyway
+      if (length(singular) >= 1) fold_args$std_X_details$scale[singular] <- 1
+      # use center/scale values from train_X to standardize test_X
+      std_test_X <- scale(test_X,
+                          center = fold_args$std_X_details$center,
+                          scale = fold_args$std_X_details$scale)
+      Sigma_21 <- fit.i$eta*(1/ncol(train_X))*tcrossprod(std_test_X,
+                                                         fold_args$std_X)
+    }
+
+    yhat <- predict_within_cv(fit = format.i,
                               testX = test_X,
-                              og_scale_beta = og_betas.i,
-                              std_X_details = fold_args$std_X_details,
                               type = 'blup',
                               fbm = cv_args$fbm_flag,
                               Sigma_11 = Sigma_11,
-                              Sigma_21 = Sigma_21, ...)
+                              Sigma_21 = Sigma_21)
 
   }
 

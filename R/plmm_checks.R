@@ -8,7 +8,6 @@
 #' @param init Initial values for coefficients. Default is 0 for all columns of X.
 #' @param gamma The tuning parameter of the MCP/SCAD penalty (see details). Default is 3 for MCP and 3.7 for SCAD.
 #' @param alpha Tuning parameter for the Mnet estimator which controls the relative contributions from the MCP/SCAD penalty and the ridge, or L2 penalty. alpha=1 is equivalent to MCP/SCAD penalty, while alpha=0 would be equivalent to ridge regression. However, alpha=0 is not supported; alpha may be arbitrarily small, but not exactly 0.
-#' @param dfmax Option to be added soon: Upper bound for the number of nonzero coefficients. Default is no upper bound. However, for large data sets, computational burden may be heavy for models with a large number of nonzero coefficients.
 #' @param trace If set to TRUE, inform the user of progress by announcing the beginning of each step of the modeling process. Default is FALSE.
 #' @param save_rds  Optional: if a filepath and name is specified (e.g., `save_rds = "~/dir/my_results.rds"`), then the model results are saved to the provided location. Defaults to NULL, which does not save the result.
 #' @param return_fit Optional: a logical value indicating whether the fitted model should be returned as a `plmm` object in the current (assumed interactive) session. Defaults to TRUE.
@@ -26,7 +25,6 @@ plmm_checks <- function(design,
                         init = NULL,
                         gamma,
                         alpha = 1,
-                        dfmax = NULL,
                         trace = FALSE,
                         save_rds = NULL,
                         return_fit = TRUE,
@@ -54,7 +52,6 @@ plmm_checks <- function(design,
 
   std_X_n <- design$std_X_n
   std_X_p <- design$std_X_p
-  # genomic <- index_std_X(std_X_p = design$std_X_p, non_genomic = design$non_gen)
 
   # create a list that captures the centering/scaling for std_X;
   # will need this later, see `untransform()`
@@ -84,12 +81,10 @@ plmm_checks <- function(design,
   penalty_factor <- design$penalty_factor
 
   # set up defaults --------------------------------------------------
-  if(is.null(dfmax)){dfmax <- std_X_p + 1}
-
   # set default init
   if(is.null(init)){init <- rep(0, std_X_p)}
 
-    # set default gamma (gamma not used in 'lasso' option)
+  # set default gamma (gamma not used in 'lasso' option)
   if (missing(gamma)) gamma <- switch(penalty, SCAD = 3.7, MCP = 3, lasso = 1)
 
   # error checking design matrix  ---------------------------------------------
@@ -117,12 +112,36 @@ plmm_checks <- function(design,
 
   }
 
+  # for in in-memory designs, set plink flag to FALSE
+  if(is.null(design$is_plink)){
+    plink_flag <- FALSE
+  } else if (design$is_plink) {
+    plink_flag <- TRUE
+  } else {
+    plink_flag <- FALSE
+  }
+
+  # warn about bigalgebra issues if this is user's first call to filebacked analysis
+  # Check if the warning has been shown
+  if (!.plmmr_env$warning_shown & fbm_flag) {
+
+    warning("Note: plmmr depends on the package bigalgebra, the current GitHub \n
+            version of which is throwing some warnings for filebacked analysis. \n
+            See https://github.com/fbertran/bigalgebra/issues/2 \n
+            If you see a warning about 'stack imbalance' appear while you are \n
+            fitting a model with plmm() or cv_plmm(), we recommend downloading \n
+            the last stable version of bigalebra.\n
+            This message is displayed after your first call to fit a model \n
+            using filebacked data.\n")
+
+    # Update the state
+    .plmmr_env$warning_shown <- TRUE
+  }
+
   # return list for model preparation ---------------------------------
   ret <- list(
     std_X = std_X,
     std_X_details = std_X_details,
-    std_X_n = std_X_n,
-    std_X_p = std_X_p,
     std_X_n = std_X_n,
     std_X_p = std_X_p,
     y = y,
@@ -131,6 +150,7 @@ plmm_checks <- function(design,
     K = K,
     diag_K = diag_K,
     fbm_flag = fbm_flag,
+    plink_flag = plink_flag,
     penalty = penalty,
     penalty_factor = penalty_factor,
     gamma = gamma,

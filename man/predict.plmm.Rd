@@ -7,11 +7,10 @@
 \method{predict}{plmm}(
   object,
   newX,
-  type = c("lp", "coefficients", "vars", "nvars", "blup"),
+  type = c("blup", "coefficients", "vars", "nvars", "lp"),
+  X = NULL,
   lambda,
   idx = 1:length(object$lambda),
-  X,
-  y,
   ...
 )
 }
@@ -26,18 +25,15 @@ This can be either a FBM object or a 'matrix' object.
 \item{type}{A character argument indicating what type of prediction should be
 returned. Options are "lp," "coefficients," "vars," "nvars," and "blup." See details.}
 
+\item{X}{Optional: if \code{type = 'blup'} and the model was fit in-memory, the design matrix used to fit the model represented in \code{object} must be supplied.
+When supplied, this design matrix will be standardized using the center/scale values in \code{object$std_X_details}, so please \strong{do not} standardize this matrix before supplying here.
+\strong{Note}: If the model was fit file-backed, then the filepath to the .bk file with this standardized design matrix is returned as 'std_X' in the fit supplied to 'object'.}
+
 \item{lambda}{A numeric vector of regularization parameter \code{lambda} values
 at which predictions are requested.}
 
 \item{idx}{Vector of indices of the penalty parameter \code{lambda} at which
 predictions are required. By default, all indices are returned.}
-
-\item{X}{Original design matrix (not including intercept column)
-from object. Required only if \code{type == 'blup'} and object is too large to be
-returned in \code{plmm} object.}
-
-\item{y}{Original continuous outcome vector from object.
-Required only if \code{type == 'blup'}.}
 
 \item{...}{Additional optional arguments}
 }
@@ -71,10 +67,14 @@ fit <- plmm(design = train_design)
 
 # make predictions for all lambda values
  pred1 <- predict(object = fit, newX = test$X, type = "lp")
+ pred2 <- predict(object = fit, newX = test$X, type = "blup", X = train$X)
 
 # look at mean squared prediction error
 mspe <- apply(pred1, 2, function(c){crossprod(test$y - c)/length(c)})
 min(mspe)
+
+mspe_blup <- apply(pred2, 2, function(c){crossprod(test$y - c)/length(c)})
+min(mspe_blup) # BLUP is better
 
 # compare the MSPE of our model to a null model, for reference
 # null model = intercept only -> y_hat is always mean(y)

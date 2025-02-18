@@ -9,16 +9,13 @@ plmm_prep(
   std_X,
   std_X_n,
   std_X_p,
-  genomic = 1:std_X_p,
   n,
   p,
   centered_y,
-  k = NULL,
   K = NULL,
   diag_K = NULL,
   eta_star = NULL,
   fbm_flag,
-  penalty_factor = rep(1, ncol(std_X)),
   trace = NULL,
   ...
 )
@@ -30,15 +27,11 @@ plmm_prep(
 
 \item{std_X_p}{The number of features in std_X (integer)}
 
-\item{genomic}{A numeric vector of indices indicating which columns in the standardized X are genomic covariates. Defaults to all columns.}
-
 \item{n}{The number of instances in the \emph{original} design matrix X. This should not be altered by standardization.}
 
 \item{p}{The number of features in the \emph{original} design matrix X, including constant features}
 
 \item{centered_y}{Continuous outcome vector, centered.}
-
-\item{k}{An integer specifying the number of singular values to be used in the approximation of the rotated design matrix. This argument is passed to \code{RSpectra::svds()}. Defaults to \code{min(n, p) - 1}, where n and p are the dimensions of the \strong{standardized} design matrix.}
 
 \item{K}{Similarity matrix used to rotate the data. This should either be a known matrix that reflects the covariance of y, or an estimate (Default is \eqn{\frac{1}{p}(XX^T)}, where X is standardized). This can also be a list, with components d and u (as returned by choose_k)}
 

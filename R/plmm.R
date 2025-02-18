@@ -1,4 +1,4 @@
-#' Fit a linear mixed model via non-convex penalized maximum likelihood.
+#' Fit a linear mixed model via penalized maximum likelihood.
 #' @param design                  The first argument must be one of three things:
 #'                                  (1) `plmm_design` object (as created by `create_design()`)
 #'                                  (2) a string with the file path to a design object (the file path must end in '.rds')
@@ -17,49 +17,60 @@
 #' @param init                    Initial values for coefficients. Default is 0 for all columns of X.
 #' @param gamma                   The tuning parameter of the MCP/SCAD penalty (see details). Default is 3 for MCP and 3.7 for SCAD.
 #' @param alpha                   Tuning parameter for the Mnet estimator which controls the relative contributions from the MCP/SCAD penalty and the ridge, or L2 penalty. alpha=1 is equivalent to MCP/SCAD penalty, while alpha=0 would be equivalent to ridge regression. However, alpha=0 is not supported; alpha may be arbitrarily small, but not exactly 0.
-#' @param dfmax                   (**Future idea; not yet incorporated**): Upper bound for the number of nonzero coefficients. Default is no upper bound. However, for large data sets, computational burden may be heavy for models with a large number of nonzero coefficients.
 #' @param lambda_min              The smallest value for lambda, as a fraction of lambda.max. Default is .001 if the number of observations is larger than the number of covariates and .05 otherwise.
 #' @param nlambda                 Length of the sequence of lambda. Default is 100.
 #' @param lambda                  A user-specified sequence of lambda values. By default, a sequence of values of length nlambda is computed, equally spaced on the log scale.
 #' @param eps                     Convergence threshold. The algorithm iterates until the RMSD for the change in linear predictors for each coefficient is less than eps. Default is \code{1e-4}.
 #' @param max_iter                Maximum number of iterations (total across entire path). Default is 10000.
-#' @param convex                  (**Future idea; not yet incorporated**): Calculate index for which objective function ceases to be locally convex? Default is TRUE.
 #' @param warn                    Return warning messages for failures to converge and model saturation? Default is TRUE.
 #' @param trace                   If set to TRUE, inform the user of progress by announcing the beginning of each step of the modeling process. Default is FALSE.
 #' @param save_rds                Optional: if a filepath and name *without* the '.rds' suffix is specified (e.g., `save_rds = "~/dir/my_results"`), then the model results are saved to the provided location (e.g., "~/dir/my_results.rds").
-#'                                Defaults to NULL, which does not save the result.
+#'                                Accompanying the RDS file is a log file for documentation, e.g., "~/dir/my_results.log".
+#'                                Defaults to NULL, which does not save any RDS or log files.
 #' @param return_fit              Optional: a logical value indicating whether the fitted model should be returned as a `plmm` object in the current (assumed interactive) session.
-#'                                Defaults to TRUE for in-memory data, and defaults to FALSE for filebacked data.
-#' @param compact_save            Optional: if TRUE, three separate .rds files will saved: one with the 'beta_vals', one with 'K', and one with everything else (see below).
-#'                                Defaults to FALSE. **Note**: you must specify `save_rds` for this argument to be called.
+#'                                Defaults to TRUE.
 #' @param ...                     Additional optional arguments to `plmm_checks()`
 #'
-#' @returns A list which includes:
-#'  * beta_vals: the matrix of estimated coefficients on the original scale. Rows are predictors, columns are values of `lambda`
-#'  * rotated_scale_beta_vals: the matrix of estimated coefficients on the ~rotated~ scale. This is the scale on which the model was fit.
-#'  * lambda: a numeric vector of the lasso tuning parameter values used in model fitting.
-#'  * eta: a number (double) between 0 and 1 representing the estimated proportion of the variance in the outcome attributable to population/correlation structure
-#'  * linear_predictors: the matrix resulting from the product of `stdrot_X` and the estimated coefficients on the ~rotated~ scale.
-#'  * penalty: character string indicating the penalty with which the model was fit (e.g., 'MCP')
-#'  * gamma: numeric value indicating the tuning parameter used for the SCAD or lasso penalties was used. Not relevant for lasso models.
-#'  * alpha: numeric value indicating the elastic net tuning parameter.
-#'  * loss: vector with the numeric values of the loss at each value of `lambda` (calculated on the ~rotated~ scale)
-#'  * penalty_factor: vector of indicators corresponding to each predictor, where 1 = predictor was penalized.
-#'  * ns_idx: vector with the indices of predictors which were non-singular features (i.e., features which had variation).
-#'  * iter: numeric vector with the number of iterations needed in model fitting for each value of `lambda`
-#'  * converged: vector of logical values indicating whether the model fitting converged at each value of `lambda`
+#' @returns A list which includes 19 items:
+#'  * beta_vals: The matrix of estimated coefficients. Rows are predictors (with the first row being the intercept), and columns are values of `lambda`.
+#'  * std_Xbeta: A matrix of the linear predictors on the scale of the standardized design matrix. Rows are predictors, columns are values of `lambda`.
+#'              **Note**: std_Xbeta will not include rows for the intercept or for constant features.
+#'  * std_X_details: A list with 9 items:
+#'                  - center: The center values used to center the columns of the design matrix
+#'                  - scale: The scaling values used to scale the columns of the design matrix
+#'                  - ns: An integer vector of the nonsingular columns of the original data
+#'                  - unpen: An integer vector of indices of the unpenalized features, if any were specified in the design
+#'                  - unpen_colnames: A charater vector of the column names of ay unpenalized features.
+#'                  - X_colnames: A character vector with the column names of all features in the original design matrix
+#'                  - X_rownames: A character vector with the row names of all features in the original design matrix; if none were provided, these are named 'row1', 'row2', etc.
+#'                  - std_X_colnames: A subset of X_colnames representing only nonsignular columns (i.e., the columns indexed by 'ns')
+#'                  - std_X_rownames: A subset of X_rownames representing rows that passed QC filtering & and are represented in both the genotype and phenotype data sets (this only applies to PLINK data)
+#'  * std_X: If design matrix is filebacked, the descriptor for the filebacked data is returned using \code{bigmemory::describe()}. If the the data were stored in-memory, nothing is returned (std_X is NULL).
+#'  * y: The outcome vector used in model fitting.
+#'  * p: The total number of columns in the design matrix (including any singular columns, excluding the intercept).
+#'  * plink_flag: Logical - did the data come from PLINK files?
+#'  * lambda: A numeric vector of the tuning parameter values used in model fitting.
+#'  * eta: A double between 0 and 1 representing the estimated proportion of the variance in the outcome attributable to population/correlation structure
+#'  * penalty: A character string indicating the penalty with which the model was fit (e.g., 'MCP')
+#'  * gamma: A numeric value indicating the tuning parameter used for the SCAD or lasso penalties was used. Not relevant for lasso models.
+#'  * alpha: A numeric value indicating the elastic net tuning parameter.
+#'  * loss: A vector with the numeric values of the loss at each value of `lambda` (calculated on the ~rotated~ scale)
+#'  * penalty_factor: A vector of indicators corresponding to each predictor, where 1 = predictor was penalized.
+#'  * ns_idx: An integer vector with the indices of predictors which were non-singular features (i.e., features which had variation), where feature 1 is the intercept.
+#'  * iter: An integer vector with the number of iterations needed in model fitting for each value of `lambda`
+#'  * converged: A vector of logical values indicating whether the model fitting converged at each value of `lambda`
 #'  * K: a list with 2 elements, `s` and `U` ---
-#'    * s: a vector of the eigenvalues of the relatedness matrix; see `relatedness_mat()` for details.
-#'    * U: a matrix of the eigenvectors of the relatedness matrix
+#'    - s: a vector of the eigenvalues of the relatedness matrix K (note: K is the kinship matrix for genetic/genomic data; see the article on notation for details)
+#'    - U: a matrix of the eigenvectors of the relatedness matrix
 #' @export
 #'
 #' @examples
 #' # using admix data
 #' admix_design <- create_design(X = admix$X, y = admix$y)
-#' fit_admix1 <- plmm(design = admix_design)
-#' s1 <- summary(fit_admix1, idx = 50)
-#' print(s1)
-#' plot(fit_admix1)
+#' fit <- plmm(design = admix_design)
+#' s <- summary(fit, idx = 50)
+#' print(s)
+#' plot(fit)
 #'
 #' # Note: for examples with large data that are too big to fit in memory,
 #' # see the article "PLINK files/file-backed matrices" on our website
@@ -74,36 +85,30 @@ plmm <- function(design,
                  init = NULL,
                  gamma,
                  alpha = 1,
-                 dfmax = NULL,
                  lambda_min, # passed to internal function setup_lambda()
                  nlambda = 100,
                  lambda,
                  eps = 1e-04,
                  max_iter = 10000,
-                 convex = TRUE,
                  warn = TRUE,
                  trace = FALSE,
                  save_rds = NULL,
-                 compact_save = FALSE,
-                 return_fit = NULL,
+                 return_fit = TRUE,
                  ...) {
 
-  # check filepaths for saving results ------------------------------
-
-  if (compact_save & is.null(save_rds)) {
-    stop("You have set 'compact_save = TRUE', but no argument was supplied to 'save_rds'.
-          \nPlease specify a filepath (as a string) to 'save_rds'")
-  }
+  # check filepaths for saving results, if requested  --------------------------
 
   if (!is.null(save_rds)) {
     save_rds <- check_for_file_extension(save_rds)
     # ^^ internally, we need to take off the extension from the file name
+
+    # start the log file
+    logfile <- create_log(outfile = ifelse(!is.null(save_rds),
+                                           save_rds,
+                                           "./plmm"))
+
   }
 
-  # start the log -----------------------
-  logfile <- create_log(outfile = ifelse(!is.null(save_rds),
-                                         save_rds,
-                                         "./plmm"))
 
   # create a design if needed -------------
   if (inherits(design, "data.frame") | inherits(design, 'matrix')) {
@@ -130,28 +135,19 @@ plmm <- function(design,
                               eta_star = eta_star,
                               penalty = penalty,
                               init = init,
-                              dfmax = dfmax,
                               gamma = gamma,
                               alpha = alpha,
                               trace = trace,
                               ...)
 
-  # set defaults for returning fit
-  if (is.null(return_fit)) {
-    if (checked_data$fbm_flag) {
-      return_fit <- FALSE
-    } else {
-      return_fit <- TRUE
-    }
-  }
-
   # prep (SVD)-------------------------------------------------
   if(trace){cat("Input data passed all checks at ",
                 pretty_time())}
-
+  if (!is.null(save_rds)) {
   cat("Input data passed all checks at ",
       pretty_time(),
       "\n", file = logfile, append = TRUE)
+  }
 
   the_prep <- plmm_prep(std_X = checked_data$std_X,
                         std_X_n = checked_data$std_X_n,
@@ -167,12 +163,14 @@ plmm <- function(design,
   if (trace)(cat("Eigendecomposition finished at ",
                  pretty_time()))
 
-  cat("Eigendecomposition finished at ",
-      pretty_time(),
-      "\n", file = logfile, append = TRUE)
+  if (!is.null(save_rds)) {
+    cat("Eigendecomposition finished at ",
+        pretty_time(),
+        "\n", file = logfile, append = TRUE)
+  }
+
 
   # rotate & fit -------------------------------------------------------------
-  if (is.null(dfmax)) dfmax <- checked_data$p + 1
   the_fit <- plmm_fit(prep = the_prep,
                       y = checked_data$y,
                       std_X_details = checked_data$std_X_details,
@@ -196,59 +194,35 @@ plmm <- function(design,
   the_final_product <- plmm_format(fit = the_fit,
                                    p = checked_data$p,
                                    std_X_details = checked_data$std_X_details,
-                                   fbm_flag = checked_data$fbm_flag)
+                                   fbm_flag = checked_data$fbm_flag,
+                                   plink_flag = checked_data$plink_flag)
 
   if (trace)(cat("Model ready at ",
                  pretty_time()))
-  cat("Model ready at ",
-      pretty_time(),
-      file = logfile, append = TRUE)
+
+  if (!is.null(save_rds)){
+    cat("Model ready at ",
+        pretty_time(),
+        file = logfile, append = TRUE)
+  }
 
   # handle output
   if (!is.null(save_rds)){
-    if (compact_save) {
-      # save output across multiple files
-      saveRDS(the_final_product$beta_vals, paste0(save_rds, "_coefficients.rds"))
-      cat("Coefficients (estimated beta values) saved to:", paste0(save_rds, "_coefficients.rds"), "at",
-          pretty_time(),
-          file = logfile, append = TRUE)
-
-      saveRDS(the_final_product$K, paste0(save_rds, "_K.rds"))
-      cat("K (eigendecomposition) saved to:", paste0(save_rds, "_K.rds"), "at",
-          pretty_time(),
-          file = logfile, append = TRUE)
-
-      saveRDS(the_final_product$linear_predictors, paste0(save_rds, "_linear_predictors.rds"))
-      cat("Linear predictors (on rotated scale) saved to:", paste0(save_rds, "_linear_predictors.rds"), "at",
-          pretty_time(),
-          file = logfile, append = TRUE)
-
-      saveRDS(the_final_product[c(2:3, 5:12)], paste0(save_rds, "_details.rds"))
-      cat("All other results (loss, # of iterations, ...) saved to:", paste0(save_rds, "_details.rds"), "at",
-          pretty_time(),
-          file = logfile, append = TRUE)
-
-    } else {
-      # save all output in one file (default)
-      saveRDS(the_final_product, paste0(save_rds, ".rds"))
-      cat("Results saved to:", paste0(save_rds, ".rds"), "at",
-          pretty_time(),
-          file = logfile, append = TRUE)
-    }
-
-
+    # save all output in one file (default); *not* including std_X
+    saveRDS(the_final_product[c(1:3, 5:19)],
+            paste0(save_rds, ".rds"))
+    cat("Results saved to:", paste0(save_rds, ".rds"), "at",
+        pretty_time(),
+        file = logfile, append = TRUE)
   }
 
-  if (is.null(save_rds) & !return_fit){
-    cat("You accidentally left save_rds NULL while setting return_fit = FALSE;
-        to prevent you from losing your work, I am saving the output as plmm_results.rds
-        in your current working directory (current folder).\n
-        Next time, make sure to specify your own filepath to the save_rds argument.\n",
-        file = logfile, append = TRUE)
 
-    rdsfile <- paste0(getwd(),"/plmm_results.rds")
-    saveRDS(the_final_product, rdsfile)
-    cat("Results saved to:", rdsfile, file = logfile, append = TRUE)
+  # create a failsafe -- if save_rds is NULL, make sure return_fit = TRUE
+  if (is.null(save_rds) & !return_fit){
+    cat("You accidentally left save_rds = NULL and return_fit = FALSE;
+        to prevent you from losing your work, plmm() is returning the output as if return_fit = TRUE")
+
+    return_fit <- TRUE
   }
 
   if (return_fit){
